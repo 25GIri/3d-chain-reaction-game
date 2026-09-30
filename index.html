@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chain Reaction Game</title>
+    <style>
+        :root {
+            --p1-color: #ff4757;
+            --p2-color: #2ed573;
+            --p3-color: #1e90ff;
+            --p4-color: #ffa502;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1e1e2f;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+        }
+
+        #setup-screen, #game-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        #game-screen {
+            display: none;
+        }
+
+        .btn {
+            background: #6c5ce7;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #5849be;
+        }
+
+        select, input {
+            padding: 8px;
+            font-size: 1rem;
+            border-radius: 5px;
+            border: 1px solid #444;
+            background: #2d2d44;
+            color: white;
+        }
+
+        #scoreboard {
+            display: flex;
+            gap: 20px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .player-score {
+            padding: 5px 15px;
+            border-radius: 5px;
+            border: 2px solid transparent;
+        }
+
+        .player-score.active {
+            border-color: #fff;
+            box-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        #grid {
+            display: grid;
+            gap: 4px;
+            background: #2d2d44;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+        }
+
+        .cell {
+            width: 50px;
+            height: 50px;
+            background: #3a3a5e;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+            user-select: none;
+            transition: background 0.2s;
+        }
+
+        .cell:hover {
+            background: #4a4a7e;
+        }
+
+        .atoms-container {
+            display: flex;
+            flex-wrap: wrap;
+            width: 32px;
+            height: 32px;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+        }
+
+        .atom {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0); }
+            100% { transform: scale(1); }
+        }
+
+        #message {
+            font-size: 1.1rem;
+            height: 1.5em;
+            color: #fffa65;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="setup-screen">
+        <h1>Chain Reaction</h1>
+        <p>Classic 2D Grid Strategy Game</p>
+        <div>
+            <label for="player-count">Players: </label>
+            <select id="player-count">
+                <option value="2">2 Players</option>
+                <option value="3">3 Players</option>
+                <option value="4">4 Players</option>
+            </select>
+        </div>
+        <div>
+            <label for="grid-size">Grid Size: </label>
+            <select id="grid-size">
+                <option value="6">6 x 6 (Small)</option>
+                <option value="8" selected>8 x 8 (Standard)</option>
+                <option value="10">10 x 10 (Large)</option>
+            </select>
+        </div>
+        <button class="btn" id="start-btn">Start Game</button>
+    </div>
+
+    <div id="game-screen">
+        <h1>Chain Reaction</h1>
+        <div id="scoreboard"></div>
+        <div id="message"></div>
+        <div id="grid"></div>
+        <button class="btn" id="restart-btn">Restart / Menu</button>
+    </div>
+
+    <script>
+        const playerColors = ['#ff4757', '#2ed573', '#1e90ff', '#ffa502'];
+        
+        let rows = 8;
+        let cols = 8;
+        let numPlayers = 2;
+        let currentPlayer = 0;
+        let board = []; // grid[r][c] = { owner: null, count: 0 }
+        let gameActive = false;
+        let activePlayers = new Set();
+
+        const setupScreen = document.getElementById('setup-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const gridEl = document.getElementById('grid');
+        const scoreboardEl = document.getElementById('scoreboard');
+        const messageEl = document.getElementById('message');
+
+        startBtn.addEventListener('click', () => {
+            numPlayers = parseInt(document.getElementById('player-count').value);
+            const gridSize = parseInt(document.getElementById('grid-size').value);
+            rows = gridSize;
+            cols = gridSize;
+            
+            setupScreen.style.display = 'none';
+            gameScreen.style.display = 'flex';
+            initGame();
+        });
+
+        restartBtn.addEventListener('click', () => {
+            gameScreen.style.display = 'none';
+            setupScreen.style.display = 'flex';
+        });
+
+        function initGame() {
+            currentPlayer = 0;
+            gameActive = true;
+            activePlayers = new Set([...Array(numPlayers).keys()]);
+            
+            board = Array(rows).fill(null).map(() => 
+                Array(cols).fill(null).map(() => ({ owner: null, count: 0 }))
+            );
+
+            createGridDOM();
+            updateScoreboard();
+            messageEl.textContent = `Player 1's Turn`;
+        }
+
+        function createGridDOM() {
+            gridEl.innerHTML = '';
+            gridEl.style.gridTemplateColumns = `repeat(${cols}, 50px)`;
+            gridEl.style.gridTemplateRows = `repeat(${rows}, 50px)`;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    cell.addEventListener('click', () => handleCellClick(r, c));
+                    gridEl.appendChild(cell);
+                }
+            }
+            renderBoard();
+        }
+
+        function getMaxCapacity(r, c) {
+            const isRowEdge = (r === 0 || r === rows - 1);
+            const isColEdge = (c === 0 || c === cols - 1);
+            if (isRowEdge && isColEdge) return 1; // Corner
+            if (isRowEdge || isColEdge) return 2; // Side
+            return 3; // Internal
+        }
+
+        function handleCellClick(r, c) {
+            if (!gameActive) return;
+            const cell = board[r][c];
+
+            if (cell.owner !== null && cell.owner !== currentPlayer) {
+                messageEl.textContent = `You can only place atoms in empty cells or your own cells!`;
+                return;
+            }
+
+            // Valid move
+            cell.owner = currentPlayer;
+            cell.count++;
+
+            renderBoard();
+
+            if (cell.count > getMaxCapacity(r, c)) {
+                // Trigger explosions
+                gameActive = false;
+                setTimeout(() => processExplosions(), 300);
+            } else {
+                nextPlayer();
+            }
+        }
+
+        async function processExplosions() {
+            let unstableFound = true;
+
+            while (unstableFound) {
+                unstableFound = false;
+                let newBoard = JSON.parse(JSON.stringify(board));
+                let explosions = [];
+
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        const maxCap = getMaxCapacity(r, c);
+                        if (board[r][c].count > maxCap) {
+                            unstableFound = true;
+                            explosions.push({ r, c });
+                            
+                            const owner = board[r][c].owner;
+                            const surplus = board[r][c].count - maxCap;
+                            newBoard[r][c].count = surplus;
+                            if (surplus === 0) newBoard[r][c].owner = null;
+
+                            // Distribute to neighbors
+                            const neighbors = getNeighbors(r, c);
+                            neighbors.forEach(([nr, nc]) => {
+                                newBoard[nr][nc].owner = owner;
+                                newBoard[nr][nc].count += 1;
+                            });
+                        }
+                    }
+                }
+
+                board = newBoard;
+                renderBoard();
+                await sleep(350);
+
+                // Check elimination after initial moves
+                checkEliminations();
+                if (checkWinCondition()) return;
+            }
+
+            gameActive = true;
+            nextPlayer();
+        }
+
+        function getNeighbors(r, c) {
+            const dirs = [[-1,0], [1,0], [0,-1], [0,1]];
+            let neighbors = [];
+            for (let [dr, dc] of dirs) {
+                let nr = r + dr;
+                let nc = c + dc;
+                if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+                    neighbors.push([nr, nc]);
+                }
+            }
+            return neighbors;
+        }
+
+        function checkEliminations() {
+            let presentPlayers = new Set();
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (board[r][c].owner !== null) {
+                        presentPlayers.add(board.owner !== undefined ? board[r][c].owner : board[r][c].owner);
+                    }
+                }
+            }
+
+            // Only check elimination if at least one full round has passed (approximate by checking if all initial players have played once)
+            // For simplicity, eliminate players who have 0 atoms after board interactions
+            if (activePlayers.size > 1) {
+                for (let p of activePlayers) {
+                    let hasAtoms = false;
+                    for (let r = 0; r < rows; r++) {
+                        for (let c = 0; c < cols; c++) {
+                            if (board[r][c].owner === p) hasAtoms = true;
+                        }
+                    }
+                    // Prevent elimination on turn 0 before everyone has played
+                    let totalOrbs = 0;
+                    for (let r = 0; r < rows; r++) {
+                        for (let c = 0; c < cols; c++) {
+                            if (board[r][c].owner !== null) totalOrbs++;
+                        }
+                    }
+                    if (!hasAtoms && totalOrbs >= numPlayers) {
+                        activePlayers.delete(p);
+                    }
+                }
+            }
+            updateScoreboard();
+        }
+
+        function checkWinCondition() {
+            let remaining = [];
+            for (let p = 0; p < numPlayers; p++) {
+                let hasAtoms = false;
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        if (board[r][c].owner === p) hasAtoms = true;
+                    }
+                }
+                if (hasAtoms) remaining.push(p);
+            }
+
+            let totalOrbs = 0;
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (board[r][c].owner !== null) totalOrbs++;
+                }
+            }
+
+            if (totalOrbs >= numPlayers && remaining.length === 1) {
+                gameActive = false;
+                messageEl.textContent = `Player ${remaining[0] + 1} Wins the Game! 🎉`;
+                return true;
+            }
+            return false;
+        }
+
+        function nextPlayer() {
+            do {
+                currentPlayer = (currentPlayer + 1) % numPlayers;
+            } while (!activePlayers.has(currentPlayer) && activePlayers.size > 0);
+
+            updateScoreboard();
+            messageEl.textContent = `Player ${currentPlayer + 1}'s Turn`;
+        }
+
+        function updateScoreboard() {
+            scoreboardEl.innerHTML = '';
+            for (let i = 0; i < numPlayers; i++) {
+                const scoreDiv = document.createElement('div');
+                scoreDiv.classList.add('player-score');
+                if (i === currentPlayer && gameActive) scoreDiv.classList.add('active');
+                scoreDiv.style.color = playerColors[i];
+                scoreDiv.style.borderColor = playerColors[i];
+                scoreDiv.textContent = `P${i + 1}`;
+                if (!activePlayers.has(i)) {
+                    scoreDiv.style.opacity = '0.4';
+                    scoreDiv.textContent += ' (Out)';
+                }
+                scoreboardEl.appendChild(scoreDiv);
+            }
+        }
+
+        function renderBoard() {
+            const cells = gridEl.children;
+            let index = 0;
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const cellData = board[r][c];
+                    const cellEl = cells[index++];
+                    
+                    cellEl.innerHTML = '';
+                    if (cellData.count > 0) {
+                        const container = document.createElement('div');
+                        container.classList.add('atoms-container');
+                        for (let i = 0; i < cellData.count; i++) {
+                            const atom = document.createElement('div');
+                            atom.classList.add('atom');
+                            atom.style.backgroundColor = playerColors[cellData.owner];
+                            container.appendChild(atom);
+                        }
+                        cellEl.appendChild(container);
+                    }
+                }
+            }
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+    </script>
+</body>
+</html>
